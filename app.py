@@ -1159,6 +1159,22 @@ def quick_book():
             "response": booking_response.text
         }), booking_response.status_code
 
+# check booking status 
+@app.route("/last-booking-status", methods=['GET'])
+def get_last_booking_status():
+    """Get the last booking status from the file"""
+    booking_data = load_json_file(LAST_BOOKING_FILE)
+    if booking_data:
+        return jsonify(booking_data)
+    else:
+        return jsonify({
+            "status": "No bookings yet",
+            "time": "N/A",
+            "venue": "N/A",
+            "booking_time": "N/A"
+        })
+
+# Updated index route with booking status display
 @app.route("/")
 def index():
     """Simple dashboard to check bot status"""
@@ -1173,25 +1189,55 @@ def index():
             .success { background-color: #d4edda; color: #155724; }
             .error { background-color: #f8d7da; color: #721c24; }
             .warning { background-color: #fff3cd; color: #856404; }
+            .info { background-color: #d1ecf1; color: #0c5460; }
             button { padding: 10px 20px; margin: 5px; cursor: pointer; }
             .booking-form { margin: 20px 0; padding: 20px; background: #f0f0f0; border-radius: 8px; }
             input, select { padding: 8px; margin: 5px; width: 200px; }
+            .last-booking { 
+                margin: 20px 0; 
+                padding: 20px; 
+                background: #e8f4f8; 
+                border-radius: 8px; 
+                border: 2px solid #17a2b8;
+            }
+            .last-booking h3 { margin-top: 0; color: #17a2b8; }
+            .booking-details { 
+                display: grid; 
+                grid-template-columns: auto 1fr; 
+                gap: 10px; 
+                margin-top: 15px;
+            }
+            .booking-details dt { font-weight: bold; color: #666; }
+            .booking-details dd { margin: 0; }
+            .pulse { animation: pulse 2s infinite; }
+            @keyframes pulse {
+                0% { opacity: 1; }
+                50% { opacity: 0.5; }
+                100% { opacity: 1; }
+            }
         </style>
     </head>
     <body>
-        <h1>Soho House Poolside Booking Bot</h1>
+        <h1>Soho House Poolside Booking Bot 🏖️</h1>
+        
+        <!-- Last Booking Status -->
+        <div id="lastBooking" class="last-booking">
+            <h3>📅 Last Booking Status</h3>
+            <div id="bookingContent" class="pulse">Loading...</div>
+        </div>
         
         <div id="status"></div>
-            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 5px;">
-                <h3>Complete Authentication</h3>
-                <p style="font-size: 14px; color: #666;">After clicking "Start Authentication" and logging in, paste your details here:</p>
-                <form id="authForm">
-                    <input type="text" id="session_id" placeholder="Session ID" style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 3px;" required>
-                    <input type="text" id="redirect_url" placeholder="Redirect URL (com.sohohouse.houseseven://...)" style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 3px;" required>
-                    <button type="submit" style="width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Complete Authentication</button>
-                </form>
-                <div id="auth_result" style="margin-top: 10px;"></div>
-            </div>
+        
+        <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 5px;">
+            <h3>Complete Authentication</h3>
+            <p style="font-size: 14px; color: #666;">After clicking "Start Authentication" and logging in, paste your details here:</p>
+            <form id="authForm">
+                <input type="text" id="session_id" placeholder="Session ID" style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 3px;" required>
+                <input type="text" id="redirect_url" placeholder="Redirect URL (com.sohohouse.houseseven://...)" style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 3px;" required>
+                <button type="submit" style="width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Complete Authentication</button>
+            </form>
+            <div id="auth_result" style="margin-top: 10px;"></div>
+        </div>
         
         <div class="booking-form">
             <h2>Manual Booking</h2>
@@ -1200,7 +1246,7 @@ def index():
                 <option value="NY_POOLSIDE">NY Poolside</option>
             </select>
             <input type="datetime-local" id="datetime" />
-            <input type="number" id="party" value="1" min="1" max="6" />
+            <input type="number" id="party" value="2" min="1" max="6" />
             <button onclick="bookNow()">Book Now</button>
         </div>
         
@@ -1209,26 +1255,95 @@ def index():
             <button onclick="checkStatus()">Check Token Status</button>
             <button onclick="refreshToken()">Refresh Token</button>
             <button onclick="startAuth()">Re-authenticate</button>
+            <button onclick="checkLastBooking()">🔄 Refresh Booking Status</button>
         </div>
         
         <div id="results"></div>
         
         <script>
+            async function checkLastBooking() {
+                try {
+                    const response = await fetch('/last-booking-status');
+                    const data = await response.json();
+                    
+                    const bookingDiv = document.getElementById('bookingContent');
+                    bookingDiv.classList.remove('pulse');
+                    
+                    // Check if booking was successful or failed
+                    const isSuccess = data.status && data.status.includes('Success');
+                    const isFailed = data.status && data.status.includes('Failed');
+                    
+                    // Format the booking time nicely
+                    let bookingTimeFormatted = 'N/A';
+                    if (data.booking_time && data.booking_time !== 'N/A') {
+                        const bookingDate = new Date(data.booking_time);
+                        bookingTimeFormatted = bookingDate.toLocaleString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                        });
+                    }
+                    
+                    if (isSuccess) {
+                        bookingDiv.innerHTML = `
+                            <div style="color: #155724;">
+                                <strong style="font-size: 1.2em;">✅ ${data.status}</strong>
+                                <dl class="booking-details">
+                                    <dt>Booking Time:</dt>
+                                    <dd>${bookingTimeFormatted}</dd>
+                                    <dt>Venue:</dt>
+                                    <dd>${data.venue === 'DUMBO_DECK' ? '🏖️ DUMBO Deck' : '🏊 NY Poolside'}</dd>
+                                    <dt>Last Updated:</dt>
+                                    <dd>${data.time}</dd>
+                                </dl>
+                            </div>
+                        `;
+                    } else if (isFailed) {
+                        const venuesList = data.venues_tried ? data.venues_tried.join(', ') : 'N/A';
+                        bookingDiv.innerHTML = `
+                            <div style="color: #721c24;">
+                                <strong style="font-size: 1.2em;">❌ ${data.status}</strong>
+                                <dl class="booking-details">
+                                    <dt>Attempted At:</dt>
+                                    <dd>${data.time}</dd>
+                                    <dt>Venues Tried:</dt>
+                                    <dd>${venuesList}</dd>
+                                </dl>
+                            </div>
+                        `;
+                    } else {
+                        bookingDiv.innerHTML = `
+                            <div style="color: #666;">
+                                <strong>No bookings recorded yet</strong>
+                                <p style="margin-top: 10px; font-size: 0.9em;">
+                                    Bookings will appear here after the cron job runs at 12:01 PM daily.
+                                </p>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    document.getElementById('bookingContent').innerHTML = 
+                        `<div style="color: #721c24;">Error loading booking status: ${error.message}</div>`;
+                }
+            }
+            
             async function checkStatus() {
                 const response = await fetch('/status');
                 const data = await response.json();
                 const statusDiv = document.getElementById('status');
                 
                 if (data.token_valid) {
-                    alert("Token valid")
                     statusDiv.className = 'status success';
                     statusDiv.innerHTML = `
                         <h3>✅ Token Valid</h3>
                         <p>Expires in: ${Math.round(data.expires_in / 60)} minutes</p>
-                        <p>Next scheduled booking: ${data.next_booking || 'None scheduled'}</p>
+                        <p>Auto-booking scheduled for 12:01 PM daily</p>
                     `;
                 } else {
-                    alert("Token invalid")
                     statusDiv.className = 'status error';
                     statusDiv.innerHTML = `
                         <h3>❌ Token Invalid</h3>
@@ -1244,36 +1359,37 @@ def index():
                 alert(data.success ? 'Token refreshed!' : 'Refresh failed: ' + data.error);
                 checkStatus();
             }
+            
             document.getElementById('authForm').addEventListener('submit', async function(event) {
-            event.preventDefault();
-            const sessionId = document.getElementById('session_id').value;
-            const redirectUrl = document.getElementById('redirect_url').value;
-            const resultDiv = document.getElementById('auth_result');
-            
-            resultDiv.innerHTML = '<div style="color: blue;">Processing...</div>';
-            
-            try {
-                const response = await fetch('/complete-auth', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        redirect_url: redirectUrl
-                    })
-                });
+                event.preventDefault();
+                const sessionId = document.getElementById('session_id').value;
+                const redirectUrl = document.getElementById('redirect_url').value;
+                const resultDiv = document.getElementById('auth_result');
                 
-                const data = await response.json();
+                resultDiv.innerHTML = '<div style="color: blue;">Processing...</div>';
                 
-                if (data.success) {
-                    resultDiv.innerHTML = '<div style="color: green;">✅ Authentication successful! Tokens saved. Reloading...</div>';
-                    setTimeout(() => location.reload(), 2000);
-                } else {
-                    resultDiv.innerHTML = `<div style="color: red;">❌ Error: ${data.error || 'Authentication failed'}</div>`;
+                try {
+                    const response = await fetch('/complete-auth', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            session_id: sessionId,
+                            redirect_url: redirectUrl
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        resultDiv.innerHTML = '<div style="color: green;">✅ Authentication successful! Tokens saved. Reloading...</div>';
+                        setTimeout(() => location.reload(), 2000);
+                    } else {
+                        resultDiv.innerHTML = `<div style="color: red;">❌ Error: ${data.error || 'Authentication failed'}</div>`;
+                    }
+                } catch (error) {
+                    resultDiv.innerHTML = `<div style="color: red;">❌ Error: ${error.message}</div>`;
                 }
-            } catch (error) {
-                resultDiv.innerHTML = `<div style="color: red;">❌ Error: ${error.message}</div>`;
-            }
-        });
+            });
             
             async function startAuth() {
                 window.location.href = '/start-auth';
@@ -1297,16 +1413,24 @@ def index():
                 const data = await response.json();
                 document.getElementById('results').innerHTML = 
                     '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                
+                // Refresh the booking status after manual booking
+                setTimeout(checkLastBooking, 1000);
             }
             
-            // Check status on load
+            // Check status and last booking on load
             checkStatus();
-            setInterval(checkStatus, 60000); // Check every minute
+            checkLastBooking();
+            
+            // Refresh status every minute
+            setInterval(checkStatus, 60000);
+            
+            // Refresh last booking every 30 seconds
+            setInterval(checkLastBooking, 30000);
         </script>
     </body>
     </html>
     '''
-
 @app.route("/status", methods=['GET'])
 def get_status():
     """Check token status"""
@@ -1347,7 +1471,7 @@ def scheduled_book():
         json={
             'venues': ['DUMBO_DECK', 'NY_POOLSIDE'],
             'date_time': date_time,
-            'party_size': 1,
+            'party_size': 2,
             'phone_number': '7709255248'
         }
     ):
