@@ -1099,6 +1099,7 @@ def index():
                 const statusDiv = document.getElementById('status');
                 
                 if (data.token_valid) {
+                    alert("Token valid")
                     statusDiv.className = 'status success';
                     statusDiv.innerHTML = `
                         <h3>✅ Token Valid</h3>
@@ -1106,6 +1107,7 @@ def index():
                         <p>Next scheduled booking: ${data.next_booking || 'None scheduled'}</p>
                     `;
                 } else {
+                    alert("Token invalid")
                     statusDiv.className = 'status error';
                     statusDiv.innerHTML = `
                         <h3>❌ Token Invalid</h3>
@@ -1188,7 +1190,7 @@ def index():
 def get_status():
     """Check token status"""
     try:
-        with open(DATA_DIR, 'r') as f:
+        with open(TOKENS_FILE, 'r') as f:
             token_data = json.load(f)
         
         created_at = token_data.get('created_at', 0)
