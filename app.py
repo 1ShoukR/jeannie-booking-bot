@@ -1182,7 +1182,7 @@ def index():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Soho House Booking Bot</title>
+        <title>Jeannie's BookingBot</title>
         <style>
             body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
             .status { padding: 20px; margin: 20px 0; border-radius: 8px; }
@@ -1230,7 +1230,7 @@ def index():
         
         <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 5px;">
             <h3>Complete Authentication</h3>
-            <p style="font-size: 14px; color: #666;">After clicking "Start Authentication" and logging in, paste your details here:</p>
+            <p style="font-size: 14px; color: #666;">After clicking "Start Authentication" and logging in, paste your details here. If token is expired, contact the greatest engineer in the world (Rahmin) to fix this.</p>
             <form id="authForm">
                 <input type="text" id="session_id" placeholder="Session ID" style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 3px;" required>
                 <input type="text" id="redirect_url" placeholder="Redirect URL (com.sohohouse.houseseven://...)" style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 3px;" required>
