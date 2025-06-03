@@ -215,10 +215,14 @@ def book_poolside(token):
     
     data = request.json
     venue_id = data.get('venue_id', 'NY_POOLSIDE')  # Default to NY poolside
-    date_time = data.get('date_time', '2025-06-03T19:00')
     party_size = data.get('party_size', 2)
     phone_country_code = data.get('phone_country_code', 'US')  # Changed default to 'US'
     phone_number = data.get('phone_number', '7709255248')
+    date_time = data.get('date_time')
+    if not date_time:
+        # Calculate 48 hours from now at 1:30 PM
+        booking_date = datetime.now() + timedelta(days=2)
+        date_time = booking_date.strftime('%Y-%m-%d') + 'T13:30'
     
     headers = {
         'Authorization': f'Bearer {token}',
@@ -348,7 +352,13 @@ def check_poolside_availability(token):
     """Check available poolside tables at different venues"""
     
     venue_id = request.args.get('venue_id', 'NY_POOLSIDE')
-    date_time = request.args.get('date_time', '2025-06-03T19:00')
+    date_time = request.args.get('date_time')
+    party_size = request.args.get('party_size', 2, type=int)
+    
+    # If no date_time provided, default to 48 hours from now at 1:30 PM
+    if not date_time:
+        booking_date = datetime.now() + timedelta(days=2)
+        date_time = booking_date.strftime('%Y-%m-%d') + 'T13:30'
     party_size = request.args.get('party_size', 2, type=int)
     
     headers = {
@@ -958,13 +968,13 @@ def auto_book():
     data = request.json or {}
     venues = data.get('venues', ['DUMBO_DECK', 'NY_POOLSIDE'])
     date_time = data.get('date_time')
-    party_size = data.get('party_size', 1)
+    party_size = data.get('party_size', 2)
     phone_number = data.get('phone_number', '7709255248')
     
     if not date_time:
         # Default to 48 hours from now at 1 PM
         booking_date = datetime.now() + timedelta(days=2)
-        date_time = booking_date.strftime('%Y-%m-%d') + 'T13:00'
+        date_time = booking_date.strftime('%Y-%m-%d') + 'T13:30'
     
     # Try each venue in order
     for venue_id in venues:
