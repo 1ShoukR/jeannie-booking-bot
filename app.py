@@ -8,6 +8,7 @@ import webbrowser
 import time
 import warnings
 import json
+import os
 from datetime import datetime, timedelta
 from urllib3.exceptions import InsecureRequestWarning
 
@@ -15,6 +16,11 @@ from urllib3.exceptions import InsecureRequestWarning
 warnings.filterwarnings('ignore', category=InsecureRequestWarning)
 
 app = Flask(__name__)
+
+# Use Railway's persistent volume or fallback to current directory
+DATA_DIR = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', '.')
+TOKENS_FILE = os.path.join(DATA_DIR, 'soho_tokens.json')
+LAST_BOOKING_FILE = os.path.join(DATA_DIR, 'last_booking.json')
 
 # OAuth configuration
 CLIENT_ID = "e7f9c1e1584911fcdd1d9ceb9f1ffac8e175e1ba639e5bcbc58ca76b9ea084f2"
@@ -743,7 +749,7 @@ def save_tokens():
         'expires_in': 7200
     }
     
-    with open('soho_tokens.json', 'w') as f:
+    with open(TOKENS_FILE, 'w') as f:
         json.dump(token_data, f, indent=2)
     
     return jsonify({
@@ -755,7 +761,7 @@ def save_tokens():
 def refresh_token_endpoint():
     """Refresh the access token using stored refresh token"""
     try:
-        with open('soho_tokens.json', 'r') as f:
+        with open(TOKENS_FILE, 'r') as f:
             token_data = json.load(f)
     except FileNotFoundError:
         return jsonify({"error": "No stored tokens found"}), 404
@@ -787,7 +793,7 @@ def refresh_token_endpoint():
         new_token_data = response.json()
         
         # Save the new tokens
-        with open('soho_tokens.json', 'w') as f:
+        with open(TOKENS_FILE, 'w') as f:
             json.dump(new_token_data, f, indent=2)
         
         return jsonify({
@@ -810,7 +816,7 @@ def auto_book():
     
     # Load stored tokens
     try:
-        with open('soho_tokens.json', 'r') as f:
+        with open(TOKENS_FILE, 'r') as f:
             token_data = json.load(f)
     except FileNotFoundError:
         return jsonify({"error": "No stored tokens. Please authenticate first."}), 404
@@ -867,7 +873,7 @@ def auto_book():
                 response_json, status_code = result
                 if status_code == 200:
                     # Save success status
-                    with open('last_booking.json', 'w') as f:
+                    with open(LAST_BOOKING_FILE, 'w') as f:
                         json.dump({
                             'status': f'Success: Booked {venue_id}',
                             'time': datetime.now().strftime('%Y-%m-%d %I:%M %p'),
@@ -1052,7 +1058,7 @@ def index():
         </style>
     </head>
     <body>
-        <h1>Jeannie's Booking Bot</h1>
+        <h1>Soho House Poolside Booking Bot</h1>
         
         <div id="status"></div>
         
@@ -1190,38 +1196,41 @@ def scheduled_book():
         return result
 
 if __name__ == "__main__":
-    @app.route("/schedule-info", methods=['GET'])
-    def schedule_info():
-        """Get information about scheduling automatic bookings"""
-        return jsonify({
-            "info": "Poolside booking automation",
-            "rules": {
-                "booking_window": "48 hours in advance",
-                "slots_open": "12:00 PM daily",
-                "session_duration": "3 hours",
-                "available_times": "8:00 AM - 8:00 PM"
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+@app.route("/schedule-info", methods=['GET'])
+def schedule_info():
+    """Get information about scheduling automatic bookings"""
+    return jsonify({
+        "info": "Poolside booking automation",
+        "rules": {
+            "booking_window": "48 hours in advance",
+            "slots_open": "12:00 PM daily",
+            "session_duration": "3 hours",
+            "available_times": "8:00 AM - 8:00 PM"
+        },
+        "automation_options": [
+            {
+                "method": "cron",
+                "description": "Set up a cron job to call /auto-book at 12:00 PM daily",
+                "example": "0 12 * * * curl -X POST http://127.0.0.1:5000/auto-book -H 'Content-Type: application/json' -d '{\"venue_id\":\"NY_POOLSIDE\",\"date_time\":\"2025-06-05T10:00\"}'"
             },
-            "automation_options": [
-                {
-                    "method": "cron",
-                    "description": "Set up a cron job to call /auto-book at 12:00 PM daily",
-                    "example": "0 12 * * * curl -X POST http://127.0.0.1:5000/auto-book -H 'Content-Type: application/json' -d '{\"venue_id\":\"NY_POOLSIDE\",\"date_time\":\"2025-06-05T10:00\"}'"
-                },
-                {
-                    "method": "scheduled_task",
-                    "description": "Use Task Scheduler (Windows) or launchd (Mac) to run daily"
-                },
-                {
-                    "method": "python_scheduler",
-                    "description": "Run a Python script with schedule library"
-                }
-            ],
-            "endpoints": {
-                "/save-tokens": "Save your tokens after authentication",
-                "/refresh-token": "Refresh expired access token",
-                "/auto-book": "Book using saved tokens"
+            {
+                "method": "scheduled_task",
+                "description": "Use Task Scheduler (Windows) or launchd (Mac) to run daily"
+            },
+            {
+                "method": "python_scheduler",
+                "description": "Run a Python script with schedule library"
             }
-        })
+        ],
+        "endpoints": {
+            "/save-tokens": "Save your tokens after authentication",
+            "/refresh-token": "Refresh expired access token",
+            "/auto-book": "Book using saved tokens"
+        }
+    })
 
 if __name__ == "__main__":
     print("\n=== Semi-Automated Soho House OAuth Flow ===")
