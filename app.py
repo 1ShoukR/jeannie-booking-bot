@@ -18,14 +18,33 @@ warnings.filterwarnings('ignore', category=InsecureRequestWarning)
 app = Flask(__name__)
 
 # Use Railway's persistent volume or fallback to current directory
-DATA_DIR = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', '.')
+DATA_DIR = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', '/data')
+# Create the data directory if it doesn't exist
+if not os.path.exists(DATA_DIR):
+    try:
+        os.makedirs(DATA_DIR)
+        print(f"Created data directory at: {DATA_DIR}")
+    except Exception as e:
+        print(f"Failed to create data directory: {e}")
+        # Fallback to current directory if volume not available
+        DATA_DIR = '.'
+# Define file paths
 TOKENS_FILE = os.path.join(DATA_DIR, 'soho_tokens.json')
 LAST_BOOKING_FILE = os.path.join(DATA_DIR, 'last_booking.json')
+
+# Log the paths being used
+print(f"DATA_DIR: {DATA_DIR}")
+print(f"TOKENS_FILE: {TOKENS_FILE}")
+print(f"LAST_BOOKING_FILE: {LAST_BOOKING_FILE}")
+print(f"DATA_DIR exists: {os.path.exists(DATA_DIR)}")
+print(f"DATA_DIR is writable: {os.access(DATA_DIR, os.W_OK)}")
+
 
 # OAuth configuration
 CLIENT_ID = "e7f9c1e1584911fcdd1d9ceb9f1ffac8e175e1ba639e5bcbc58ca76b9ea084f2"
 REDIRECT_URI = "com.sohohouse.houseseven://authcallback"
 IDENTITY_BASE_URL = "https://identity.sohohouse.com"
+
 
 # Store PKCE parameters temporarily
 oauth_sessions = {}
@@ -84,6 +103,7 @@ def start_auth():
         "authorization_url": auth_url
     })
 
+# Update the complete_auth endpoint to use the helper functions
 @app.route("/complete-auth", methods=['POST'])
 def complete_auth():
     """Complete the OAuth flow with the redirect URL from manual login"""
@@ -157,19 +177,29 @@ def complete_auth():
     del oauth_sessions[session_id]
     
     if response.status_code == 200:
-        token_data = response.json()
+        token_response = response.json()
         
-        # Store the token for later use
-        access_token = token_data.get('access_token')
+        # Save tokens automatically
+        token_save_data = {
+            'access_token': token_response.get('access_token'),
+            'refresh_token': token_response.get('refresh_token'),
+            'created_at': token_response.get('created_at', int(time.time())),
+            'expires_in': token_response.get('expires_in', 7200),
+            'token_type': token_response.get('token_type')
+        }
+        
+        saved = save_json_file(TOKENS_FILE, token_save_data)
         
         return jsonify({
             "success": True,
-            "access_token": access_token,
-            "token_type": token_data.get("token_type"),
-            "expires_in": token_data.get("expires_in"),
-            "refresh_token": token_data.get("refresh_token"),
-            "created_at": token_data.get("created_at"),
-            "next_step": f"Use the access_token to make API calls or test with GET /test-token/{access_token}"
+            "access_token": token_response.get('access_token'),
+            "token_type": token_response.get("token_type"),
+            "expires_in": token_response.get("expires_in"),
+            "refresh_token": token_response.get("refresh_token"),
+            "created_at": token_response.get("created_at"),
+            "tokens_saved": saved,
+            "save_path": TOKENS_FILE if saved else None,
+            "next_step": f"Use the access_token to make API calls or test with GET /test-token/{token_response.get('access_token')}"
         })
     else:
         return jsonify({
@@ -177,6 +207,7 @@ def complete_auth():
             "status": response.status_code,
             "response": response.text
         }), 500
+
 
 @app.route("/book-poolside/<token>", methods=['POST'])
 def book_poolside(token):
@@ -732,6 +763,78 @@ def get_poolside_slots(token):
         "booking_instruction": "Use POST /book-poolside/{token} with venue_id, date_time, and party_size"
     })
 
+def save_json_file(filepath, data):
+    """Helper function to save JSON with error handling"""
+    try:
+        # Ensure directory exists
+        directory = os.path.dirname(filepath)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        
+        # Write to temporary file first
+        temp_file = filepath + '.tmp'
+        with open(temp_file, 'w') as f:
+            json.dump(data, f, indent=2)
+        
+        # Rename to final file (atomic operation)
+        os.rename(temp_file, filepath)
+        
+        print(f"Successfully saved file: {filepath}")
+        return True
+    except Exception as e:
+        print(f"Error saving file {filepath}: {e}")
+        return False
+
+def load_json_file(filepath):
+    """Helper function to load JSON with error handling"""
+    try:
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        print(f"Successfully loaded file: {filepath}")
+        return data
+    except FileNotFoundError:
+        print(f"File not found: {filepath}")
+        return None
+    except Exception as e:
+        print(f"Error loading file {filepath}: {e}")
+        return None
+
+# Add a debug endpoint to check volume status
+@app.route("/debug-volume", methods=['GET'])
+def debug_volume():
+    """Debug endpoint to check volume configuration"""
+    debug_info = {
+        "RAILWAY_VOLUME_MOUNT_PATH": os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', 'Not set'),
+        "DATA_DIR": DATA_DIR,
+        "DATA_DIR_exists": os.path.exists(DATA_DIR),
+        "DATA_DIR_writable": os.access(DATA_DIR, os.W_OK) if os.path.exists(DATA_DIR) else False,
+        "TOKENS_FILE": TOKENS_FILE,
+        "TOKENS_FILE_exists": os.path.exists(TOKENS_FILE),
+        "LAST_BOOKING_FILE": LAST_BOOKING_FILE,
+        "LAST_BOOKING_FILE_exists": os.path.exists(LAST_BOOKING_FILE),
+        "cwd": os.getcwd(),
+        "environment_variables": {k: v for k, v in os.environ.items() if 'RAILWAY' in k}
+    }
+    
+    # Try to list files in DATA_DIR
+    try:
+        debug_info["files_in_data_dir"] = os.listdir(DATA_DIR)
+    except Exception as e:
+        debug_info["files_in_data_dir"] = f"Error: {str(e)}"
+    
+    # Try to write a test file
+    test_file = os.path.join(DATA_DIR, 'test_write.txt')
+    try:
+        with open(test_file, 'w') as f:
+            f.write('Test write at ' + str(datetime.now()))
+        debug_info["test_write_success"] = True
+        os.remove(test_file)
+    except Exception as e:
+        debug_info["test_write_success"] = False
+        debug_info["test_write_error"] = str(e)
+    
+    return jsonify(debug_info)
+
 @app.route("/save-tokens", methods=['POST'])
 def save_tokens():
     """Save tokens to a file for later use"""
@@ -749,21 +852,29 @@ def save_tokens():
         'expires_in': 7200
     }
     
-    with open(TOKENS_FILE, 'w') as f:
-        json.dump(token_data, f, indent=2)
+    if save_json_file(TOKENS_FILE, token_data):
+        # Verify the file was saved
+        saved_data = load_json_file(TOKENS_FILE)
+        if saved_data:
+            return jsonify({
+                "success": True,
+                "message": "Tokens saved successfully",
+                "file_path": TOKENS_FILE,
+                "verification": "File verified"
+            })
     
     return jsonify({
-        "success": True,
-        "message": "Tokens saved successfully"
-    })
+        "error": "Failed to save tokens",
+        "file_path": TOKENS_FILE,
+        "data_dir": DATA_DIR
+    }), 500
 
+# Update refresh_token_endpoint to use helper functions
 @app.route("/refresh-token", methods=['POST'])
 def refresh_token_endpoint():
     """Refresh the access token using stored refresh token"""
-    try:
-        with open(TOKENS_FILE, 'r') as f:
-            token_data = json.load(f)
-    except FileNotFoundError:
+    token_data = load_json_file(TOKENS_FILE)
+    if not token_data:
         return jsonify({"error": "No stored tokens found"}), 404
     
     refresh_token = token_data.get('refresh_token')
@@ -793,14 +904,17 @@ def refresh_token_endpoint():
         new_token_data = response.json()
         
         # Save the new tokens
-        with open(TOKENS_FILE, 'w') as f:
-            json.dump(new_token_data, f, indent=2)
-        
-        return jsonify({
-            "success": True,
-            "access_token": new_token_data.get('access_token'),
-            "expires_in": new_token_data.get('expires_in')
-        })
+        if save_json_file(TOKENS_FILE, new_token_data):
+            return jsonify({
+                "success": True,
+                "access_token": new_token_data.get('access_token'),
+                "expires_in": new_token_data.get('expires_in')
+            })
+        else:
+            return jsonify({
+                "error": "Failed to save refreshed tokens",
+                "access_token": new_token_data.get('access_token')
+            }), 500
     else:
         return jsonify({
             "error": "Failed to refresh token",
@@ -808,6 +922,7 @@ def refresh_token_endpoint():
             "response": response.text
         }), 500
 
+# Update auto_book to use helper functions
 @app.route("/auto-book", methods=['POST'])
 def auto_book():
     """Automatically book using stored tokens"""
@@ -815,10 +930,8 @@ def auto_book():
     print(f"Request data: {request.json}")
     
     # Load stored tokens
-    try:
-        with open(TOKENS_FILE, 'r') as f:
-            token_data = json.load(f)
-    except FileNotFoundError:
+    token_data = load_json_file(TOKENS_FILE)
+    if not token_data:
         return jsonify({"error": "No stored tokens. Please authenticate first."}), 404
     
     # Check if token needs refresh
@@ -835,14 +948,15 @@ def auto_book():
             }), 401
         
         # Reload token data
-        with open('soho_tokens.json', 'r') as f:
-            token_data = json.load(f)
+        token_data = load_json_file(TOKENS_FILE)
+        if not token_data:
+            return jsonify({"error": "Failed to reload tokens after refresh"}), 500
     
     access_token = token_data.get('access_token')
     
     # Get booking parameters
-    data = request.json
-    venues = data.get('venues', ['DUMBO_DECK', 'NY_POOLSIDE'])  # Default to DUMBO_DECK first, then NY_POOLSIDE
+    data = request.json or {}
+    venues = data.get('venues', ['DUMBO_DECK', 'NY_POOLSIDE'])
     date_time = data.get('date_time')
     party_size = data.get('party_size', 1)
     phone_number = data.get('phone_number', '7709255248')
@@ -873,13 +987,12 @@ def auto_book():
                 response_json, status_code = result
                 if status_code == 200:
                     # Save success status
-                    with open(LAST_BOOKING_FILE, 'w') as f:
-                        json.dump({
-                            'status': f'Success: Booked {venue_id}',
-                            'time': datetime.now().strftime('%Y-%m-%d %I:%M %p'),
-                            'venue': venue_id,
-                            'booking_time': date_time
-                        }, f)
+                    save_json_file(LAST_BOOKING_FILE, {
+                        'status': f'Success: Booked {venue_id}',
+                        'time': datetime.now().strftime('%Y-%m-%d %I:%M %p'),
+                        'venue': venue_id,
+                        'booking_time': date_time
+                    })
                     return response_json
                 else:
                     print(f"Failed at {venue_id}, trying next venue...")
@@ -889,24 +1002,22 @@ def auto_book():
                     result_data = result.get_json()
                     if result_data.get('success'):
                         # Save success status
-                        with open('last_booking.json', 'w') as f:
-                            json.dump({
-                                'status': f'Success: Booked {venue_id}',
-                                'time': datetime.now().strftime('%Y-%m-%d %I:%M %p'),
-                                'venue': venue_id,
-                                'booking_time': date_time
-                            }, f)
+                        save_json_file(LAST_BOOKING_FILE, {
+                            'status': f'Success: Booked {venue_id}',
+                            'time': datetime.now().strftime('%Y-%m-%d %I:%M %p'),
+                            'venue': venue_id,
+                            'booking_time': date_time
+                        })
                         return result
                 except:
                     pass
     
     # If we get here, all venues failed
-    with open('last_booking.json', 'w') as f:
-        json.dump({
-            'status': f'Failed: No venues available',
-            'time': datetime.now().strftime('%Y-%m-%d %I:%M %p'),
-            'venues_tried': venues
-        }, f)
+    save_json_file(LAST_BOOKING_FILE, {
+        'status': f'Failed: No venues available',
+        'time': datetime.now().strftime('%Y-%m-%d %I:%M %p'),
+        'venues_tried': venues
+    })
     
     return jsonify({
         "error": "Failed to book at any venue",
