@@ -1239,16 +1239,6 @@ def index():
             <div id="auth_result" style="margin-top: 10px;"></div>
         </div>
         
-        <div class="booking-form">
-            <h2>Manual Booking</h2>
-            <select id="venue">
-                <option value="DUMBO_DECK">DUMBO Deck</option>
-                <option value="NY_POOLSIDE">NY Poolside</option>
-            </select>
-            <input type="datetime-local" id="datetime" />
-            <input type="number" id="party" value="2" min="1" max="6" />
-            <button onclick="bookNow()">Book Now</button>
-        </div>
         
         <div>
             <h2>Actions</h2>
