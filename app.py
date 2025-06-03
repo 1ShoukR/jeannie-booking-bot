@@ -1061,6 +1061,16 @@ def index():
         <h1>Soho House Poolside Booking Bot</h1>
         
         <div id="status"></div>
+            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 5px;">
+                <h3>Complete Authentication</h3>
+                <p style="font-size: 14px; color: #666;">After clicking "Start Authentication" and logging in, paste your details here:</p>
+                <form id="authForm">
+                    <input type="text" id="session_id" placeholder="Session ID" style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 3px;" required>
+                    <input type="text" id="redirect_url" placeholder="Redirect URL (com.sohohouse.houseseven://...)" style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 3px;" required>
+                    <button type="submit" style="width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Complete Authentication</button>
+                </form>
+                <div id="auth_result" style="margin-top: 10px;"></div>
+            </div>
         
         <div class="booking-form">
             <h2>Manual Booking</h2>
@@ -1111,6 +1121,36 @@ def index():
                 alert(data.success ? 'Token refreshed!' : 'Refresh failed: ' + data.error);
                 checkStatus();
             }
+            document.getElementById('authForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const sessionId = document.getElementById('session_id').value;
+            const redirectUrl = document.getElementById('redirect_url').value;
+            const resultDiv = document.getElementById('auth_result');
+            
+            resultDiv.innerHTML = '<div style="color: blue;">Processing...</div>';
+            
+            try {
+                const response = await fetch('/complete-auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        redirect_url: redirectUrl
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = '<div style="color: green;">✅ Authentication successful! Tokens saved. Reloading...</div>';
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    resultDiv.innerHTML = `<div style="color: red;">❌ Error: ${data.error || 'Authentication failed'}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: red;">❌ Error: ${error.message}</div>`;
+            }
+        });
             
             async function startAuth() {
                 window.location.href = '/start-auth';
@@ -1148,7 +1188,7 @@ def index():
 def get_status():
     """Check token status"""
     try:
-        with open('soho_tokens.json', 'r') as f:
+        with open(DATA_DIR, 'r') as f:
             token_data = json.load(f)
         
         created_at = token_data.get('created_at', 0)
