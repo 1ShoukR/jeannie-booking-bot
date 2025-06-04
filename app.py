@@ -976,7 +976,7 @@ def auto_book():
     if not date_time:
         # Default to 48 hours from now at 1 PM
         booking_date = datetime.now() + timedelta(days=2)
-        date_time = booking_date.strftime('%Y-%m-%d') + 'T13:30'
+        date_time = booking_date.strftime('%Y-%m-%d') + 'T18:00'
     
     # Try each venue in order
     for venue_id in venues:
