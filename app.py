@@ -932,16 +932,12 @@ def refresh_token_endpoint():
             "response": response.text
         }), 500
 
-@app.route("/auto-book", methods=['POST', 'GET'])  # Accept both POST and GET
+@app.route("/auto-book", methods=['POST', 'GET'])
 def auto_book():
     """Automatically book using stored tokens"""
     print("\n=== AUTO-BOOK CALLED ===")
     
-    # Get booking parameters
-    data = {}  # Just use empty dict since cron sends nothing anyway
-    venues = data.get('venues', ['DUMBO_DECK', 'NY_POOLSIDE'])
-    
-    # Load stored tokens
+    # Load stored tokens FIRST
     token_data = load_json_file(TOKENS_FILE)
     if not token_data:
         return jsonify({"error": "No stored tokens. Please authenticate first."}), 404
@@ -966,15 +962,19 @@ def auto_book():
     
     access_token = token_data.get('access_token')
     
-    # Get booking parameters
-    data = request.json or {}
+    # Get booking parameters ONCE
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+    except:
+        data = {}
+        
     venues = data.get('venues', ['DUMBO_DECK', 'NY_POOLSIDE'])
     date_time = data.get('date_time')
     party_size = data.get('party_size', 2)
     phone_number = data.get('phone_number', '7709255248')
     
     if not date_time:
-        # Default to 48 hours from now at 1 PM
+        # Default to 48 hours from now at 6 PM (for testing)
         booking_date = datetime.now() + timedelta(days=2)
         date_time = booking_date.strftime('%Y-%m-%d') + 'T18:00'
     
