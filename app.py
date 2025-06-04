@@ -932,15 +932,14 @@ def refresh_token_endpoint():
             "response": response.text
         }), 500
 
-# Update auto_book to use helper functions
-@app.route("/auto-book", methods=['POST'])
+@app.route("/auto-book", methods=['POST', 'GET'])  # Accept both POST and GET
 def auto_book():
     """Automatically book using stored tokens"""
-    import random
-    delay = random.uniform(25, 35)
-    time.sleep(delay)
     print("\n=== AUTO-BOOK CALLED ===")
-    print(f"Request data: {request.json}")
+    
+    # Get booking parameters
+    data = {}  # Just use empty dict since cron sends nothing anyway
+    venues = data.get('venues', ['DUMBO_DECK', 'NY_POOLSIDE'])
     
     # Load stored tokens
     token_data = load_json_file(TOKENS_FILE)
