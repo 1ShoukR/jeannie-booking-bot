@@ -1322,24 +1322,32 @@ def index():
             }
             
             async function checkStatus() {
-                const response = await fetch('/status');
-                const data = await response.json();
-                const statusDiv = document.getElementById('status');
-                
-                if (data.token_valid) {
-                    statusDiv.className = 'status success';
-                    statusDiv.innerHTML = `
-                        <h3>✅ Token Valid</h3>
-                        <p>Expires in: ${Math.round(data.expires_in / 60)} minutes</p>
-                        <p>Auto-booking scheduled for 12:01 PM daily</p>
-                    `;
-                } else {
-                    statusDiv.className = 'status error';
-                    statusDiv.innerHTML = `
-                        <h3>❌ Token Invalid</h3>
-                        <p>${data.error}</p>
-                        <p>Please re-authenticate</p>
-                    `;
+                try {
+                    const response = await fetch('/status');
+                    const data = await response.json();
+                    const statusDiv = document.getElementById('status');
+                    
+                    if (data.token_valid) {
+                        statusDiv.className = 'status success';
+                        statusDiv.innerHTML = `
+                            <h3>✅ Token Valid</h3>
+                            <p>Expires in: ${Math.round(data.expires_in / 60)} minutes</p>
+                            <p>Auto-booking scheduled for 12:01 PM daily</p>
+                        `;
+                        alert('Token valid');
+                    } else {
+                        statusDiv.className = 'status error';
+                        statusDiv.innerHTML = `
+                            <h3>❌ Token Invalid</h3>
+                            <p>${data.error}</p>
+                            <p>Please re-authenticate</p>
+                        `;
+                        alert('Token invalid');
+                    }
+                } catch (error) {
+                    console.error('Error checking status:', error);
+                    document.getElementById('status').innerHTML = 
+                        `<div class="status error"><h3>❌ Error</h3><p>Failed to check status: ${error.message}</p></div>`;
                 }
             }
             
