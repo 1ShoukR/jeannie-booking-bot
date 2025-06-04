@@ -936,6 +936,9 @@ def refresh_token_endpoint():
 @app.route("/auto-book", methods=['POST'])
 def auto_book():
     """Automatically book using stored tokens"""
+    import random
+    delay = random.uniform(25, 35)
+    time.sleep(delay)
     print("\n=== AUTO-BOOK CALLED ===")
     print(f"Request data: {request.json}")
     
