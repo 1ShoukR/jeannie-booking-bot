@@ -968,7 +968,7 @@ def auto_book():
     except:
         data = {}
         
-    venues = data.get('venues', ['DUMBO_DECK', 'NY_POOLSIDE'])
+    venues = data.get('venues', ['NY_POOLSIDE','DUMBO_DECK'])
     date_time = data.get('date_time')
     party_size = data.get('party_size', 2)
     phone_number = data.get('phone_number', '7709255248')
@@ -976,7 +976,7 @@ def auto_book():
     if not date_time:
         # Default to 48 hours from now at 6 PM (for testing)
         booking_date = datetime.now() + timedelta(days=2)
-        date_time = booking_date.strftime('%Y-%m-%d') + 'T18:00'
+        date_time = booking_date.strftime('%Y-%m-%d') + 'T13:30'
     
     # Try each venue in order
     for venue_id in venues:
