@@ -19,20 +19,17 @@ app = Flask(__name__)
 
 # Use Railway's persistent volume or fallback to current directory
 DATA_DIR = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', '/data')
-# Create the data directory if it doesn't exist
 if not os.path.exists(DATA_DIR):
     try:
         os.makedirs(DATA_DIR)
         print(f"Created data directory at: {DATA_DIR}")
     except Exception as e:
         print(f"Failed to create data directory: {e}")
-        # Fallback to current directory if volume not available
         DATA_DIR = '.'
-# Define file paths
 TOKENS_FILE = os.path.join(DATA_DIR, 'soho_tokens.json')
 LAST_BOOKING_FILE = os.path.join(DATA_DIR, 'last_booking.json')
 
-# Log the paths being used
+# Logs for debugging in prod
 print(f"DATA_DIR: {DATA_DIR}")
 print(f"TOKENS_FILE: {TOKENS_FILE}")
 print(f"LAST_BOOKING_FILE: {LAST_BOOKING_FILE}")
@@ -61,21 +58,21 @@ def generate_code_challenge(verifier):
 @app.route("/start-auth", methods=['GET'])
 def start_auth():
     """Start the OAuth flow - opens browser for manual login"""
+    """NOTE: This is just for in case the refresh token is expired, or the access token is corrupted. 
+    You can use this to  re-authenticate and get a new access token if needed, but it requires manual steps.
+    """
     
-    # Generate PKCE parameters
     session_id = secrets.token_urlsafe(16)
     code_verifier = generate_code_verifier()
     code_challenge = generate_code_challenge(code_verifier)
     state = secrets.token_urlsafe(32)
     
-    # Store session data
     oauth_sessions[session_id] = {
         'code_verifier': code_verifier,
         'state': state,
         'created_at': time.time()
     }
     
-    # Build authorization URL
     auth_params = {
         'client_id': CLIENT_ID,
         'redirect_uri': REDIRECT_URI,
@@ -88,7 +85,6 @@ def start_auth():
     
     auth_url = f"{IDENTITY_BASE_URL}/authorize?" + urllib.parse.urlencode(auth_params)
     
-    # Open browser
     webbrowser.open(auth_url)
     
     return jsonify({
@@ -103,7 +99,7 @@ def start_auth():
         "authorization_url": auth_url
     })
 
-# Update the complete_auth endpoint to use the helper functions
+# Route to complete the OAuth flow after manual login
 @app.route("/complete-auth", methods=['POST'])
 def complete_auth():
     """Complete the OAuth flow with the redirect URL from manual login"""
@@ -115,12 +111,10 @@ def complete_auth():
     if not session_id or not redirect_url:
         return jsonify({"error": "Missing session_id or redirect_url"}), 400
     
-    # Get session data
     session_data = oauth_sessions.get(session_id)
     if not session_data:
         return jsonify({"error": "Invalid or expired session"}), 400
     
-    # Parse the redirect URL to get the authorization code
     try:
         parsed_url = urllib.parse.urlparse(redirect_url)
         params = urllib.parse.parse_qs(parsed_url.query)
@@ -130,7 +124,6 @@ def complete_auth():
         if not auth_code:
             return jsonify({"error": "No authorization code in redirect URL"}), 400
         
-        # Debug information
         print(f"Expected state: {session_data['state']}")
         print(f"Received state: {state}")
         
@@ -170,10 +163,9 @@ def complete_auth():
         f"{IDENTITY_BASE_URL}/oauth/token",
         json=token_data,
         headers=headers,
-        verify=False  # Disable SSL verification for development
+        verify=False  
     )
     
-    # Clean up session
     del oauth_sessions[session_id]
     
     if response.status_code == 200:
@@ -214,9 +206,9 @@ def book_poolside(token):
     """Book a poolside table using the authenticated token"""
     
     data = request.json
-    venue_id = data.get('venue_id', 'NY_POOLSIDE')  # Default to NY poolside
+    venue_id = data.get('venue_id', 'NY_POOLSIDE')  
     party_size = data.get('party_size', 2)
-    phone_country_code = data.get('phone_country_code', 'US')  # Changed default to 'US'
+    phone_country_code = data.get('phone_country_code', 'US')  
     phone_number = data.get('phone_number', '7709255248')
     date_time = data.get('date_time')
     if not date_time:
@@ -231,7 +223,6 @@ def book_poolside(token):
         'User-Agent': 'DigitalHouse/8.129 (com.sohohouse.houseseven; build:17190; iOS 18.5.0)'
     }
     
-    # Step 1: Lock the table
     lock_data = {
         "data": {
             "type": "table_locks",
@@ -279,7 +270,6 @@ def book_poolside(token):
     print(f"Lock successful! Lock ID: {lock_id}")
     print(f"Lock token: {lock_token[:50]}...")
     
-    # Step 2: Create the booking
     booking_data = {
         "data": {
             "type": "table_bookings",
@@ -355,7 +345,6 @@ def check_poolside_availability(token):
     date_time = request.args.get('date_time')
     party_size = request.args.get('party_size', 2, type=int)
     
-    # If no date_time provided, default to 48 hours from now at 1:30 PM
     if not date_time:
         booking_date = datetime.now() + timedelta(days=2)
         date_time = booking_date.strftime('%Y-%m-%d') + 'T13:30'
@@ -776,17 +765,14 @@ def get_poolside_slots(token):
 def save_json_file(filepath, data):
     """Helper function to save JSON with error handling"""
     try:
-        # Ensure directory exists
         directory = os.path.dirname(filepath)
         if not os.path.exists(directory):
             os.makedirs(directory)
         
-        # Write to temporary file first
         temp_file = filepath + '.tmp'
         with open(temp_file, 'w') as f:
             json.dump(data, f, indent=2)
         
-        # Rename to final file (atomic operation)
         os.rename(temp_file, filepath)
         
         print(f"Successfully saved file: {filepath}")
@@ -826,13 +812,11 @@ def debug_volume():
         "environment_variables": {k: v for k, v in os.environ.items() if 'RAILWAY' in k}
     }
     
-    # Try to list files in DATA_DIR
     try:
         debug_info["files_in_data_dir"] = os.listdir(DATA_DIR)
     except Exception as e:
         debug_info["files_in_data_dir"] = f"Error: {str(e)}"
     
-    # Try to write a test file
     test_file = os.path.join(DATA_DIR, 'test_write.txt')
     try:
         with open(test_file, 'w') as f:
@@ -863,7 +847,6 @@ def save_tokens():
     }
     
     if save_json_file(TOKENS_FILE, token_data):
-        # Verify the file was saved
         saved_data = load_json_file(TOKENS_FILE)
         if saved_data:
             return jsonify({
@@ -879,7 +862,7 @@ def save_tokens():
         "data_dir": DATA_DIR
     }), 500
 
-# Update refresh_token_endpoint to use helper functions
+# Endpoint to refresh token using stored refresh token
 @app.route("/refresh-token", methods=['POST'])
 def refresh_token_endpoint():
     """Refresh the access token using stored refresh token"""
@@ -932,12 +915,14 @@ def refresh_token_endpoint():
             "response": response.text
         }), 500
 
+# Endpoint to automatically book using stored tokens
+# This is the main booking endpoint that will be used for automated bookings
+# It will try to book at multiple venues in order until successful or all fail.
 @app.route("/auto-book", methods=['POST', 'GET'])
 def auto_book():
     """Automatically book using stored tokens"""
     print("\n=== AUTO-BOOK CALLED ===")
     
-    # Load stored tokens FIRST
     token_data = load_json_file(TOKENS_FILE)
     if not token_data:
         return jsonify({"error": "No stored tokens. Please authenticate first."}), 404
@@ -947,7 +932,6 @@ def auto_book():
     expires_in = token_data.get('expires_in', 7200)
     
     if time.time() > created_at + expires_in - 300:  # 5 min buffer
-        # Refresh the token
         refresh_response = refresh_token_endpoint()
         if isinstance(refresh_response, tuple) and refresh_response[1] != 200:
             return jsonify({
@@ -955,14 +939,12 @@ def auto_book():
                 "hint": "Use GET /start-auth to begin manual authentication"
             }), 401
         
-        # Reload token data
         token_data = load_json_file(TOKENS_FILE)
         if not token_data:
             return jsonify({"error": "Failed to reload tokens after refresh"}), 500
     
     access_token = token_data.get('access_token')
     
-    # Get booking parameters ONCE
     try:
         data = request.get_json(force=True, silent=True) or {}
     except:
@@ -974,11 +956,10 @@ def auto_book():
     phone_number = data.get('phone_number', '7709255248')
     
     if not date_time:
-        # Default to 48 hours from now at 6 PM (for testing)
+        # Default to 48 hours from now at 1:30 PM 
         booking_date = datetime.now() + timedelta(days=2)
         date_time = booking_date.strftime('%Y-%m-%d') + 'T13:30'
     
-    # Try each venue in order
     for venue_id in venues:
         print(f"\n=== Trying venue: {venue_id} ===")
         
@@ -1009,7 +990,6 @@ def auto_book():
                 else:
                     print(f"Failed at {venue_id}, trying next venue...")
             else:
-                # Check the response for success
                 try:
                     result_data = result.get_json()
                     if result_data.get('success'):
@@ -1024,7 +1004,6 @@ def auto_book():
                 except:
                     pass
     
-    # If we get here, all venues failed
     save_json_file(LAST_BOOKING_FILE, {
         'status': f'Failed: No venues available',
         'time': datetime.now().strftime('%Y-%m-%d %I:%M %p'),
@@ -1042,7 +1021,6 @@ def quick_book():
     """Quick book endpoint for testing"""
     print("\n=== QUICK-BOOK ENDPOINT ===")
     
-    # Load stored tokens
     try:
         with open('soho_tokens.json', 'r') as f:
             token_data = json.load(f)
@@ -1051,7 +1029,6 @@ def quick_book():
     
     access_token = token_data.get('access_token')
     
-    # Get parameters
     data = request.json or {}
     venue_id = data.get('venue_id', 'DUMBO_DECK')
     date_time = data.get('date_time', '2025-06-03T08:00')
@@ -1176,7 +1153,8 @@ def get_last_booking_status():
             "booking_time": "N/A"
         })
 
-# Updated index route with booking status display
+# Simple dashboard to check bot status and perform actions
+# I should probably make this a proper HTML page with JS, but fuck it im lazy lol 
 @app.route("/")
 def index():
     """Simple dashboard to check bot status"""
@@ -1459,14 +1437,13 @@ def get_status():
             "error": "No tokens found"
         })
 
-# Add this near the end of the file, before @app.route("/scheduled-book", methods=['GET'])
+# Depricated endpoint for manual booking. Not really needed anymore i wanted to use this to test the booking flow
 def scheduled_book():
     """Endpoint for scheduled booking - can be called by Railway cron or external service"""
     # Calculate booking time (48 hours from now at 1 PM)
     booking_date = datetime.now() + timedelta(days=2)
     date_time = booking_date.strftime('%Y-%m-%d') + 'T13:00'
     
-    # Make internal request to auto-book
     with app.test_request_context(
         json={
             'venues': ['DUMBO_DECK', 'NY_POOLSIDE'],
@@ -1477,7 +1454,6 @@ def scheduled_book():
     ):
         result = auto_book()
         
-        # Log the result
         print(f"Scheduled booking attempt at {datetime.now()}: {result}")
         
         return result
@@ -1486,6 +1462,8 @@ if __name__ == "__main__":
     import os
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
+# Route to get information about scheduling automatic bookings
 @app.route("/schedule-info", methods=['GET'])
 def schedule_info():
     """Get information about scheduling automatic bookings"""
